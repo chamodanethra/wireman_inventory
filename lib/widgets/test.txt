@@ -1,0 +1,465 @@
+import 'package:flutter/material.dart';
+
+class ProductItem extends StatelessWidget {
+  final Key key;
+  final BuildContext context;
+  final int index;
+  final String code;
+  final String name;
+  final int totalQty;
+  final int adjustedQty;
+  final bool isLongPressed;
+  final Function didLongPress;
+  final Function didTap;
+  final int currentSelectedTabIndex;
+  final int availableLoadingQty;
+
+  ProductItem({
+    @required this.key,
+    @required this.context,
+    @required this.index,
+    @required this.name,
+    @required this.code,
+    @required this.totalQty,
+    @required this.adjustedQty,
+    @required this.isLongPressed,
+    @required this.didLongPress,
+    @required this.didTap,
+    @required this.currentSelectedTabIndex,
+    this.availableLoadingQty,
+  }) : super(key: key);
+
+  Future<void> _increaseQty(LongPressStartDetails details) async {
+    if (currentSelectedTabIndex == 1 && availableLoadingQty == 0) {
+      return showDialog<void>(
+        context: context,
+        barrierDismissible: false, // user must tap button!
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Unavailable Stock Alert!!'),
+            content: SingleChildScrollView(
+              child: ListBody(
+                children: <Widget>[
+                  Text(
+                      'Please make sure enough stocks are available in the Primary Stock.'),
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              FlatButton(
+                child: Text('OK'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      );
+    }
+    didLongPress(index, details.globalPosition.dy, this.context, true,
+        currentSelectedTabIndex);
+  }
+
+  Future<void> _decreaseQty(LongPressStartDetails details) async {
+    if (totalQty > 0) {
+      didLongPress(index, details.globalPosition.dy, this.context, false,
+          currentSelectedTabIndex);
+    }
+  }
+
+  Future<void> primaryStockUnavailable() {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // user must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Unavailable Stock Alert!!'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                    'Please make sure enough stocks are available in the Primary Stock.'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            FlatButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void tappedControlButtons(int qty) {
+    if (totalQty + qty >= 0) {
+      if (currentSelectedTabIndex == 1 && qty > availableLoadingQty) {
+        primaryStockUnavailable();
+        return;
+      }
+      didTap(index, qty, currentSelectedTabIndex);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: isLongPressed ? Theme.of(context).primaryColor : null,
+      elevation: 5,
+      margin: const EdgeInsets.symmetric(
+        vertical: 8,
+        horizontal: 5,
+      ),
+      child: SizedBox(
+        height: 76,
+        child: ListTile(
+          leading: CircleAvatar(
+            radius: 30,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  totalQty.toString(),
+                ),
+              ),
+            ),
+          ),
+          title: Text(code),
+          subtitle: FittedBox(
+            child: Text(name),
+            fit: BoxFit.scaleDown,
+          ),
+          trailing: Container(
+            width: 140,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Card(
+                  elevation: 3,
+                  color: adjustedQty > 0 ? Colors.green[200] : Colors.red[200],
+                  child: adjustedQty == 0
+                      ? null
+                      : Text(
+                          (adjustedQty).toString(),
+                          textAlign: TextAlign.center,
+                        ),
+                ),
+                Row(
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsets.all(5),
+                      child: GestureDetector(
+                        child: const CircleAvatar(
+                          radius: 20,
+                          child: Icon(Icons.add),
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                        onTap: () => tappedControlButtons(1),
+                        onDoubleTap: () => tappedControlButtons(10),
+                        onLongPressStart: (LongPressStartDetails details) =>
+                            _increaseQty(details),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(5),
+                      child: GestureDetector(
+                        child: const CircleAvatar(
+                          radius: 20,
+                          child: Icon(Icons.remove),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                        onTap: () => tappedControlButtons(-1),
+                        onDoubleTap: () => tappedControlButtons(-10),
+                        onLongPressStart: (LongPressStartDetails details) =>
+                            _decreaseQty(details),
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/product.dart';
+import '../providers/products.dart';
+
+class ProductItem extends StatefulWidget {
+  final Key key;
+  final BuildContext context;
+  final int index;
+  final bool isLongPressed;
+  final Function didLongPress;
+  final Function didTap;
+  final int currentSelectedTabIndex;
+  final String productId;
+
+  ProductItem({
+    @required this.key,
+    @required this.context,
+    @required this.index,
+    @required this.productId,
+    @required this.isLongPressed,
+    @required this.didLongPress,
+    @required this.didTap,
+    @required this.currentSelectedTabIndex,
+  }) : super(key: key);
+
+  @override
+  _ProductItemState createState() => _ProductItemState();
+}
+
+class _ProductItemState extends State<ProductItem> {
+  int originalPrimaryQty;
+  int originalLorryQty;
+  var _isLoading = true;
+
+  // Future<void> _increaseQty(LongPressStartDetails details) async {
+  //   if (widget.currentSelectedTabIndex == 1 &&
+  //       widget.availableLoadingQty == 0) {
+  //     return showDialog<void>(
+  //       context: widget.context,
+  //       barrierDismissible: false, // user must tap button!
+  //       builder: (BuildContext context) {
+  //         return AlertDialog(
+  //           title: Text('Unavailable Stock Alert!!'),
+  //           content: SingleChildScrollView(
+  //             child: ListBody(
+  //               children: <Widget>[
+  //                 Text(
+  //                     'Please make sure enough stocks are available in the Primary Stock.'),
+  //               ],
+  //             ),
+  //           ),
+  //           actions: <Widget>[
+  //             FlatButton(
+  //               child: Text('OK'),
+  //               onPressed: () {
+  //                 Navigator.of(context).pop();
+  //               },
+  //             ),
+  //           ],
+  //         );
+  //       },
+  //     );
+  //   }
+  //   widget.didLongPress(widget.index, details.globalPosition.dy,
+  //       this.widget.context, true, widget.currentSelectedTabIndex);
+  // }
+
+  // Future<void> _decreaseQty(LongPressStartDetails details) async {
+  //   if (widget.totalQty > 0) {
+  //     widget.didLongPress(widget.index, details.globalPosition.dy,
+  //         this.widget.context, false, widget.currentSelectedTabIndex);
+  //   }
+  // }
+
+  Future<void> primaryStockUnavailable() {
+    return showDialog<void>(
+      context: widget.context,
+      barrierDismissible: false, // user must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Unavailable Stock Alert!!'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                    'Please make sure enough stocks are available in the Primary Stock.'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            FlatButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void tappedControlButtons(int qty, int modPrimaryQty, int modLorryQty) {
+    if (widget.currentSelectedTabIndex == 1) {
+      if (modLorryQty + qty >= originalLorryQty) {
+        if (widget.currentSelectedTabIndex == 1 && qty > 3) {
+          primaryStockUnavailable();
+          return;
+        }
+      }
+    }
+    if (0 + qty >= 0) {
+      if (widget.currentSelectedTabIndex == 1 && qty > 3) {
+        primaryStockUnavailable();
+        return;
+      }
+      widget.didTap(widget.index, qty, widget.currentSelectedTabIndex);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<Product>(
+      builder: (_, product, child) => _isLoading
+          ? const Center(
+              child: const CircularProgressIndicator(),
+            )
+          : Card(
+              color:
+                  widget.isLongPressed ? Theme.of(context).primaryColor : null,
+              elevation: 5,
+              margin: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 5,
+              ),
+              child: SizedBox(
+                height: 76,
+                child: ListTile(
+                  leading: CircleAvatar(
+                    radius: 30,
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                            '${widget.currentSelectedTabIndex == 0 ? product.primaryStockList[product.primaryStockList.length - 1].qty : product.lorryStockList[product.lorryStockList.length - 1].qty}'),
+                      ),
+                    ),
+                  ),
+                  title: Text(product.code),
+                  subtitle: FittedBox(
+                    child: Text(product.name),
+                    fit: BoxFit.scaleDown,
+                  ),
+                  trailing: Container(
+                    width: 140,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        Card(
+                          elevation: 3,
+                          color: (widget.currentSelectedTabIndex == 0
+                                      ? product
+                                              .primaryStockList[product
+                                                      .primaryStockList.length -
+                                                  1]
+                                              .qty -
+                                          originalPrimaryQty
+                                      : product
+                                              .lorryStockList[product
+                                                      .lorryStockList.length -
+                                                  1]
+                                              .qty -
+                                          originalPrimaryQty) >
+                                  0
+                              ? Colors.green[200]
+                              : Colors.red[200],
+                          child: (widget.currentSelectedTabIndex == 0
+                                      ? product
+                                              .primaryStockList[product
+                                                      .primaryStockList.length -
+                                                  1]
+                                              .qty -
+                                          originalPrimaryQty
+                                      : product
+                                              .lorryStockList[product
+                                                      .lorryStockList.length -
+                                                  1]
+                                              .qty -
+                                          originalPrimaryQty) ==
+                                  0
+                              ? null
+                              : Text(
+                                  ('${widget.currentSelectedTabIndex == 0 ? product.primaryStockList[product.primaryStockList.length - 1].qty - originalPrimaryQty : product.lorryStockList[product.lorryStockList.length - 1].qty - originalLorryQty}'),
+                                  textAlign: TextAlign.center,
+                                ),
+                        ),
+                        Row(
+                          children: <Widget>[
+                            Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: GestureDetector(
+                                child: const CircleAvatar(
+                                  radius: 20,
+                                  child: Icon(Icons.add),
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onTap: () => tappedControlButtons(
+                                    1,
+                                    product
+                                        .primaryStockList[
+                                            product.primaryStockList.length - 1]
+                                        .qty,
+                                    product
+                                        .lorryStockList[
+                                            product.lorryStockList.length - 1]
+                                        .qty),
+                                onDoubleTap: () => tappedControlButtons(10),
+                                // onLongPressStart: (LongPressStartDetails details) =>
+                                //     _increaseQty(details),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: GestureDetector(
+                                child: const CircleAvatar(
+                                  radius: 20,
+                                  child: Icon(Icons.remove),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                                // onTap: () => tappedControlButtons(-1),
+                                // onDoubleTap: () => tappedControlButtons(-10),
+                                // onLongPressStart: (LongPressStartDetails details) =>
+                                //     _decreaseQty(details),
+                              ),
+                            ),
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  @override
+  void initState() {
+    Future.delayed(Duration.zero).then((_) {
+      var prod = Provider.of<Products>(context, listen: false)
+          .getProductById(widget.productId);
+      originalPrimaryQty =
+          prod.primaryStockList[prod.primaryStockList.length - 1].qty;
+      originalLorryQty =
+          prod.lorryStockList[prod.lorryStockList.length - 1].qty;
+    }).then((_) {
+      setState(() {
+        _isLoading = false;
+      });
+    });
+
+    super.initState();
+  }
+}

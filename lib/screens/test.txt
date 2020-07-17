@@ -1,0 +1,1884 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
+import '../providers/products.dart';
+import '../widgets/new_transaction.dart';
+import '../widgets/product_item.dart';
+import '../models/edit_product.dart';
+import '../providers/product.dart';
+import '../widgets/new_product.dart';
+
+class ProductsScreen extends StatefulWidget {
+  final String title;
+
+  ProductsScreen({
+    @required this.title,
+  });
+
+  @override
+  _ProductsScreenState createState() => _ProductsScreenState();
+}
+
+class _ProductsScreenState extends State<ProductsScreen>
+    with TickerProviderStateMixin {
+  AnimationController animationController;
+  int longPressedIndex = -1;
+  double displayHeight;
+  Animation<Offset> slideAnimation;
+  Tween<Offset> slideTween;
+  List<List<EditProduct>> editProductsList = List();
+  List<Product> products;
+  var _isLoading = true;
+  var uuid = Uuid();
+  @override
+  void initState() {
+    animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      reverseDuration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    slideTween = Tween<Offset>(begin: Offset.zero, end: Offset.zero);
+    slideAnimation = slideTween.animate(CurvedAnimation(
+      parent: animationController,
+      curve: Curves.easeIn,
+    ));
+    Future.delayed(Duration.zero).then((_) {
+      products = Provider.of<Products>(context, listen: false)
+          .productsFromCategory(widget.title);
+    }).then((_) {
+      editProductsList.add(List());
+      editProductsList.add(List());
+      for (var i = 0; i < products.length; i++) {
+        editProductsList[0].add(EditProduct(
+            qty: 0,
+            date: DateTime.now(),
+            transaction: Transaction.grn,
+            transactionId: uuid.v4()));
+        editProductsList[1].add(EditProduct(
+            qty: 0,
+            date: DateTime.now(),
+            transaction: Transaction.sales,
+            transactionId: uuid.v4()));
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    });
+
+    animationController.forward();
+    super.initState();
+  }
+
+  void didLongPress(int index, double dy, BuildContext ctx, bool isIncreasing,
+      int currentSelectedTabIndex) async {
+    setState(() {
+      longPressedIndex = index;
+      animationController = AnimationController(
+        duration: const Duration(milliseconds: 400),
+        reverseDuration: const Duration(milliseconds: 200),
+        vsync: this,
+      );
+      slideTween = Tween<Offset>(
+          begin: Offset.zero,
+          end: Offset(
+              0,
+              min(
+                  ((-310 + (displayHeight - dy - 92 / 2)) /
+                      (displayHeight - 100)), //100 = appBarHeight
+                  0)));
+      slideAnimation = slideTween.animate(CurvedAnimation(
+        parent: animationController,
+        curve: Curves.easeIn,
+      ));
+    });
+    animationController.forward();
+    await showDialog(
+      context: ctx,
+      builder: (_) {
+        return NewTransaction(
+          isIncreasing,
+          animationController,
+          editProduct,
+          displayHeight,
+          currentSelectedTabIndex,
+          index,
+          widget.title,
+          editProductsList[currentSelectedTabIndex][index].qty,
+        );
+      },
+    ).then((value) {
+      setState(() {
+        longPressedIndex = -1;
+      });
+    });
+  }
+
+  void editProduct(
+      int adjustedQty, DateTime transactionDate, int currentSelectedTabIndex) {
+    if (currentSelectedTabIndex == 1) {
+      setState(() {
+        editProductsList[1][longPressedIndex].qty += adjustedQty;
+        if (editProductsList[1][longPressedIndex].qty > 0) {
+          editProductsList[0][longPressedIndex].qty =
+              -editProductsList[1][longPressedIndex].qty;
+          editProductsList[0][longPressedIndex].date = transactionDate;
+          editProductsList[0][longPressedIndex].transactionId =
+              editProductsList[1][longPressedIndex].transactionId;
+        } else {
+          editProductsList[0][longPressedIndex].qty = 0;
+        }
+        editProductsList[1][longPressedIndex].date = transactionDate;
+      });
+    } else {
+      setState(() {
+        editProductsList[0][longPressedIndex].qty += adjustedQty;
+        if (editProductsList[0][longPressedIndex].qty < 0) {
+          editProductsList[1][longPressedIndex].qty =
+              -editProductsList[0][longPressedIndex].qty;
+          editProductsList[1][longPressedIndex].date = transactionDate;
+          editProductsList[1][longPressedIndex].transactionId =
+              editProductsList[0][longPressedIndex].transactionId;
+        } else {
+          editProductsList[1][longPressedIndex].qty = 0;
+        }
+        editProductsList[0][longPressedIndex].date = transactionDate;
+      });
+    }
+  }
+
+  void didTap(int index, int adjustedQty, int currentSelectedTabIndex) {
+    if (currentSelectedTabIndex == 1) {
+      setState(() {
+        editProductsList[1][index].qty += adjustedQty;
+        if (editProductsList[1][index].qty > 0) {
+          editProductsList[0][index].qty = -editProductsList[1][index].qty;
+          editProductsList[0][index].date = DateTime.now();
+          editProductsList[0][index].transactionId =
+              editProductsList[1][index].transactionId;
+        } else {
+          editProductsList[0][index].qty = 0;
+        }
+        editProductsList[1][index].date = DateTime.now();
+      });
+    } else {
+      setState(() {
+        editProductsList[0][index].qty += adjustedQty;
+        if (editProductsList[0][index].qty < 0) {
+          editProductsList[1][index].qty = -editProductsList[0][index].qty;
+          editProductsList[1][index].date = DateTime.now();
+          editProductsList[1][index].transactionId =
+              editProductsList[0][index].transactionId;
+        } else {
+          editProductsList[1][index].qty = 0;
+        }
+        editProductsList[0][index].date = DateTime.now();
+      });
+    }
+  }
+
+  double min(double a, double b) {
+    if (a < b) {
+      return a;
+    }
+    return b;
+  }
+
+  double max(double a, double b) {
+    if (a > b) {
+      return a;
+    }
+    return b;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    displayHeight ??= MediaQuery.of(context)?.size?.height;
+    return Consumer<Products>(
+      builder: (context, products, _) => DefaultTabController(
+        initialIndex: 1,
+        length: 2,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            title: Text(widget.title),
+            centerTitle: true,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(44),
+              child: TabBar(
+                unselectedLabelColor: Colors.white,
+                labelColor: Theme.of(context).accentColor,
+                tabs: <Widget>[
+                  const Tab(
+                    icon: const Icon(Icons.home),
+                    text: 'Primary',
+                  ),
+                  const Tab(
+                    icon: const Icon(Icons.business_center),
+                    text: 'Lorry',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          body: _isLoading
+              ? const Center(
+                  child: const CircularProgressIndicator(),
+                )
+              : TabBarView(
+                  physics: NeverScrollableScrollPhysics(),
+                  children: [
+                    Container(
+                      transform: Matrix4.translationValues(
+                        0.0,
+                        longPressedIndex != -1
+                            ? -max(
+                                MediaQuery.of(context).viewInsets.bottom - 238,
+                                0)
+                            : 0,
+                        0.0,
+                      ),
+                      height: displayHeight,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: ListView.builder(
+                          itemBuilder: (context, index) => ProductItem(
+                            key: ValueKey(index),
+                            context: context,
+                            index: index,
+                            name: products
+                                .productsFromCategory(widget.title)[index]
+                                .name,
+                            code: products
+                                .productsFromCategory(widget.title)[index]
+                                .code,
+                            totalQty: products
+                                    .productsFromCategory(widget.title)[index]
+                                    .primaryStockList[products
+                                            .productsFromCategory(
+                                                widget.title)[index]
+                                            .primaryStockList
+                                            .length -
+                                        1]
+                                    .qty +
+                                editProductsList[
+                                        DefaultTabController.of(context)
+                                            .index][index]
+                                    .qty,
+                            adjustedQty: editProductsList[
+                                        DefaultTabController.of(context).index]
+                                    [index]
+                                .qty,
+                            didLongPress: didLongPress,
+                            didTap: didTap,
+                            isLongPressed: index == longPressedIndex,
+                            currentSelectedTabIndex:
+                                DefaultTabController.of(context).index,
+                          ),
+                          itemCount: products
+                              .productsFromCategory(widget.title)
+                              .length,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      transform: Matrix4.translationValues(
+                        0.0,
+                        longPressedIndex != -1
+                            ? -max(
+                                MediaQuery.of(context).viewInsets.bottom - 238,
+                                0)
+                            : 0,
+                        0.0,
+                      ),
+                      height: displayHeight,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: ListView.builder(
+                          itemBuilder: (context, index) => ProductItem(
+                            key: ValueKey(index),
+                            context: context,
+                            index: index,
+                            name: products
+                                .productsFromCategory(widget.title)[index]
+                                .name,
+                            code: products
+                                .productsFromCategory(widget.title)[index]
+                                .code,
+                            totalQty: products
+                                    .productsFromCategory(widget.title)[index]
+                                    .lorryStockList[products
+                                            .productsFromCategory(
+                                                widget.title)[index]
+                                            .lorryStockList
+                                            .length -
+                                        1]
+                                    .qty +
+                                editProductsList[
+                                        DefaultTabController.of(context)
+                                            .index][index]
+                                    .qty,
+                            adjustedQty: editProductsList[
+                                        DefaultTabController.of(context).index]
+                                    [index]
+                                .qty,
+                            availableLoadingQty: products
+                                    .productsFromCategory(widget.title)[index]
+                                    .primaryStockList[products
+                                            .productsFromCategory(
+                                                widget.title)[index]
+                                            .primaryStockList
+                                            .length -
+                                        1]
+                                    .qty +
+                                editProductsList[0][index].qty,
+                            didLongPress: didLongPress,
+                            didTap: didTap,
+                            isLongPressed: index == longPressedIndex,
+                            currentSelectedTabIndex:
+                                DefaultTabController.of(context).index,
+                          ),
+                          itemCount: products
+                              .productsFromCategory(widget.title)
+                              .length,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+          floatingActionButtonLocation:
+              _isLoading ? null : FloatingActionButtonLocation.centerFloat,
+          floatingActionButton: _isLoading
+              ? null
+              : FloatingActionButton(
+                  child: Icon(isSaveMode() ? Icons.save : Icons.add),
+                  onPressed: () {
+                    if (!isSaveMode()) {
+                      showModalBottomSheet(
+                        isScrollControlled: true,
+                        context: context,
+                        builder: (_) {
+                          return NewProduct(_addNewProduct);
+                        },
+                      );
+                    } else {
+                      _saveStockChanges(
+                          products.productsFromCategory(widget.title));
+                    }
+                  }),
+        ),
+      ),
+    );
+  }
+
+  void _saveStockChanges(List<Product> products) {
+    Map<String, List<EditProduct>> editedPrimaryProducts = Map();
+    Map<String, List<EditProduct>> editedLorryProducts = Map();
+    for (var i = 0; i < products.length; i++) {
+      if (editProductsList[0][i].qty != 0) {
+        EditProduct editedPrimaryStock = EditProduct(
+          qty: editProductsList[0][i].qty +
+              products[i]
+                  .primaryStockList[products[i].primaryStockList.length - 1]
+                  .qty,
+          date: editProductsList[0][i].date,
+          transaction: editProductsList[0][i].qty > 0
+              ? Transaction.grn
+              : Transaction.loading,
+          transactionId: editProductsList[0][i].transactionId,
+        );
+        products[i].primaryStockList.add(editedPrimaryStock);
+        products[i].primaryStockList.sort((a, b) => a.date.compareTo(b.date));
+        editedPrimaryProducts['${products[i].id}'] =
+            products[i].primaryStockList;
+      }
+      if (editProductsList[1][i].qty != 0) {
+        EditProduct editedLorrytock = EditProduct(
+          qty: editProductsList[1][i].qty +
+              products[i]
+                  .lorryStockList[products[i].lorryStockList.length - 1]
+                  .qty,
+          date: editProductsList[1][i].date,
+          transaction: editProductsList[1][i].qty > 0
+              ? Transaction.loading
+              : Transaction.sales,
+          transactionId: editProductsList[1][i].transactionId,
+        );
+        products[i].lorryStockList.add(editedLorrytock);
+        products[i].lorryStockList.sort((a, b) => a.date.compareTo(b.date));
+        editedLorryProducts['${products[i].id}'] = products[i].lorryStockList;
+      }
+    }
+    Provider.of<Products>(context, listen: false)
+        .saveStockChanges(editedPrimaryProducts, editedLorryProducts)
+        .then((_) {
+      setState(() {
+        for (var i = 0; i < products.length; i++) {
+          editProductsList[0][i].qty = 0;
+          editProductsList[0][i].date = DateTime.now();
+          editProductsList[0][i].transactionId = uuid.v4();
+          editProductsList[1][i].qty = 0;
+          editProductsList[1][i].date = DateTime.now();
+          editProductsList[1][i].transactionId = uuid.v4();
+        }
+      });
+    });
+  }
+
+  void _addNewProduct(String name, String productCode, int primaryQty,
+      int lorryQty, DateTime minAvailableDate) {
+    final primaryStock = EditProduct(
+      qty: primaryQty,
+      date: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+    );
+    final lorryStock = EditProduct(
+      qty: lorryQty,
+      date: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+    );
+    List<EditProduct> primaryStockList = List();
+    primaryStockList.add(primaryStock);
+    List<EditProduct> lorryStockList = List();
+    lorryStockList.add(lorryStock);
+    final product = Product(
+      id: DateTime.now().toString(),
+      code: productCode,
+      name: name,
+      categoryTitle: widget.title,
+      primaryStockList: primaryStockList,
+      lorryStockList: lorryStockList,
+    );
+
+    Provider.of<Products>(context, listen: false).addProduct(product);
+    // context.read<Products>().addProduct(product);
+    setState(() {
+      editProductsList[0].add(EditProduct(
+        qty: 0,
+        date: DateTime.now(),
+        transaction: Transaction.stockTake,
+        transactionId: uuid.v4(),
+      ));
+      editProductsList[1].add(EditProduct(
+        qty: 0,
+        date: DateTime.now(),
+        transaction: Transaction.stockTake,
+        transactionId: uuid.v4(),
+      ));
+    });
+  }
+
+  bool isSaveMode() {
+    for (var i = 0; i < editProductsList[0].length; i++) {
+      if (editProductsList[0][i].qty != 0 || editProductsList[1][i].qty != 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    animationController.dispose();
+    super.dispose();
+  }
+}
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
+import '../providers/products.dart';
+import '../widgets/new_transaction.dart';
+import '../widgets/product_item.dart';
+import '../models/edit_product.dart';
+import '../providers/product.dart';
+import '../widgets/new_product.dart';
+
+class ProductsScreen extends StatefulWidget {
+  final String title;
+
+  ProductsScreen({
+    @required this.title,
+  });
+
+  @override
+  _ProductsScreenState createState() => _ProductsScreenState();
+}
+
+class _ProductsScreenState extends State<ProductsScreen>
+    with TickerProviderStateMixin {
+  AnimationController animationController;
+  int longPressedIndex = -1;
+  double displayHeight;
+  Animation<Offset> slideAnimation;
+  Tween<Offset> slideTween;
+  List<List<EditProduct>> editProductsList = List();
+  List<Product> products;
+  var _isLoading = false;
+  var uuid = Uuid();
+  @override
+  void initState() {
+    animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      reverseDuration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    slideTween = Tween<Offset>(begin: Offset.zero, end: Offset.zero);
+    slideAnimation = slideTween.animate(CurvedAnimation(
+      parent: animationController,
+      curve: Curves.easeIn,
+    ));
+    // Future.delayed(Duration.zero).then((_) {
+    //   products = Provider.of<Products>(context, listen: false)
+    //       .productsFromCategory(widget.title);
+    // }).then((_) {
+    //   editProductsList.add(List());
+    //   editProductsList.add(List());
+    //   for (var i = 0; i < products.length; i++) {
+    //     editProductsList[0].add(EditProduct(
+    //         qty: 0,
+    //         date: DateTime.now(),
+    //         transaction: Transaction.grn,
+    //         transactionId: uuid.v4()));
+    //     editProductsList[1].add(EditProduct(
+    //         qty: 0,
+    //         date: DateTime.now(),
+    //         transaction: Transaction.sales,
+    //         transactionId: uuid.v4()));
+    //   }
+    //   setState(() {
+    //     _isLoading = false;
+    //   });
+    // });
+
+    animationController.forward();
+    super.initState();
+  }
+
+  void didLongPress(int index, double dy, BuildContext ctx, bool isIncreasing,
+      int currentSelectedTabIndex) async {
+    setState(() {
+      longPressedIndex = index;
+      animationController = AnimationController(
+        duration: const Duration(milliseconds: 400),
+        reverseDuration: const Duration(milliseconds: 200),
+        vsync: this,
+      );
+      slideTween = Tween<Offset>(
+          begin: Offset.zero,
+          end: Offset(
+              0,
+              min(
+                  ((-310 + (displayHeight - dy - 92 / 2)) /
+                      (displayHeight - 100)), //100 = appBarHeight
+                  0)));
+      slideAnimation = slideTween.animate(CurvedAnimation(
+        parent: animationController,
+        curve: Curves.easeIn,
+      ));
+    });
+    animationController.forward();
+    await showDialog(
+      context: ctx,
+      builder: (_) {
+        return NewTransaction(
+          isIncreasing,
+          animationController,
+          editProduct,
+          displayHeight,
+          currentSelectedTabIndex,
+          index,
+          widget.title,
+          editProductsList[currentSelectedTabIndex][index].qty,
+        );
+      },
+    ).then((value) {
+      setState(() {
+        longPressedIndex = -1;
+      });
+    });
+  }
+
+  void editProduct(
+      int adjustedQty, DateTime transactionDate, int currentSelectedTabIndex) {
+    if (currentSelectedTabIndex == 1) {
+      setState(() {
+        editProductsList[1][longPressedIndex].qty += adjustedQty;
+        if (editProductsList[1][longPressedIndex].qty > 0) {
+          editProductsList[0][longPressedIndex].qty =
+              -editProductsList[1][longPressedIndex].qty;
+          editProductsList[0][longPressedIndex].date = transactionDate;
+          editProductsList[0][longPressedIndex].transactionId =
+              editProductsList[1][longPressedIndex].transactionId;
+        } else {
+          editProductsList[0][longPressedIndex].qty = 0;
+        }
+        editProductsList[1][longPressedIndex].date = transactionDate;
+      });
+    } else {
+      setState(() {
+        editProductsList[0][longPressedIndex].qty += adjustedQty;
+        if (editProductsList[0][longPressedIndex].qty < 0) {
+          editProductsList[1][longPressedIndex].qty =
+              -editProductsList[0][longPressedIndex].qty;
+          editProductsList[1][longPressedIndex].date = transactionDate;
+          editProductsList[1][longPressedIndex].transactionId =
+              editProductsList[0][longPressedIndex].transactionId;
+        } else {
+          editProductsList[1][longPressedIndex].qty = 0;
+        }
+        editProductsList[0][longPressedIndex].date = transactionDate;
+      });
+    }
+  }
+
+  void didTap(int index, int adjustedQty, int currentSelectedTabIndex) {
+    if (currentSelectedTabIndex == 1) {
+      setState(() {
+        editProductsList[1][index].qty += adjustedQty;
+        if (editProductsList[1][index].qty > 0) {
+          editProductsList[0][index].qty = -editProductsList[1][index].qty;
+          editProductsList[0][index].date = DateTime.now();
+          editProductsList[0][index].transactionId =
+              editProductsList[1][index].transactionId;
+        } else {
+          editProductsList[0][index].qty = 0;
+        }
+        editProductsList[1][index].date = DateTime.now();
+      });
+    } else {
+      setState(() {
+        editProductsList[0][index].qty += adjustedQty;
+        if (editProductsList[0][index].qty < 0) {
+          editProductsList[1][index].qty = -editProductsList[0][index].qty;
+          editProductsList[1][index].date = DateTime.now();
+          editProductsList[1][index].transactionId =
+              editProductsList[0][index].transactionId;
+        } else {
+          editProductsList[1][index].qty = 0;
+        }
+        editProductsList[0][index].date = DateTime.now();
+      });
+    }
+  }
+
+  double min(double a, double b) {
+    if (a < b) {
+      return a;
+    }
+    return b;
+  }
+
+  double max(double a, double b) {
+    if (a > b) {
+      return a;
+    }
+    return b;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    displayHeight ??= MediaQuery.of(context)?.size?.height;
+    return Consumer<Products>(
+      builder: (context, products, _) => DefaultTabController(
+        initialIndex: 1,
+        length: 2,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            title: Text(widget.title),
+            centerTitle: true,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(44),
+              child: TabBar(
+                unselectedLabelColor: Colors.white,
+                labelColor: Theme.of(context).accentColor,
+                tabs: <Widget>[
+                  const Tab(
+                    icon: const Icon(Icons.home),
+                    text: 'Primary',
+                  ),
+                  const Tab(
+                    icon: const Icon(Icons.business_center),
+                    text: 'Lorry',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          body: _isLoading
+              ? const Center(
+                  child: const CircularProgressIndicator(),
+                )
+              : TabBarView(
+                  physics: NeverScrollableScrollPhysics(),
+                  children: [
+                    Container(
+                      transform: Matrix4.translationValues(
+                        0.0,
+                        longPressedIndex != -1
+                            ? -max(
+                                MediaQuery.of(context).viewInsets.bottom - 238,
+                                0)
+                            : 0,
+                        0.0,
+                      ),
+                      height: displayHeight,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: ListView.builder(
+                          itemBuilder: (context, index) =>
+                              ChangeNotifierProvider.value(
+                            value: products
+                                .productsFromCategory(widget.title)[index],
+                            child: ProductItem(
+                              key: ValueKey(index),
+                              context: context,
+                              index: index,
+                              productId: products
+                                  .productsFromCategory(widget.title)[index]
+                                  .id,
+                              didLongPress: didLongPress,
+                              didTap: didTap,
+                              isLongPressed: index == longPressedIndex,
+                              currentSelectedTabIndex:
+                                  DefaultTabController.of(context).index,
+                            ),
+                          ),
+                          itemCount: products
+                              .productsFromCategory(widget.title)
+                              .length,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      transform: Matrix4.translationValues(
+                        0.0,
+                        longPressedIndex != -1
+                            ? -max(
+                                MediaQuery.of(context).viewInsets.bottom - 238,
+                                0)
+                            : 0,
+                        0.0,
+                      ),
+                      height: displayHeight,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: ListView.builder(
+                          itemBuilder: (context, index) =>
+                              ChangeNotifierProvider.value(
+                            value: products
+                                .productsFromCategory(widget.title)[index],
+                            child: ProductItem(
+                              key: ValueKey(index),
+                              context: context,
+                              index: index,
+                              productId: products
+                                  .productsFromCategory(widget.title)[index]
+                                  .id,
+                              didLongPress: didLongPress,
+                              didTap: didTap,
+                              isLongPressed: index == longPressedIndex,
+                              currentSelectedTabIndex:
+                                  DefaultTabController.of(context).index,
+                            ),
+                          ),
+                          itemCount: products
+                              .productsFromCategory(widget.title)
+                              .length,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+          // floatingActionButtonLocation:
+          //     _isLoading ? null : FloatingActionButtonLocation.centerFloat,
+          // floatingActionButton: _isLoading
+          //     ? null
+          //     : FloatingActionButton(
+          //         child: Icon(isSaveMode() ? Icons.save : Icons.add),
+          //         onPressed: () {
+          //           if (!isSaveMode()) {
+          //             showModalBottomSheet(
+          //               isScrollControlled: true,
+          //               context: context,
+          //               builder: (_) {
+          //                 return NewProduct(_addNewProduct);
+          //               },
+          //             );
+          //           } else {
+          //             _saveStockChanges(
+          //                 products.productsFromCategory(widget.title));
+          //           }
+          //         }),
+        ),
+      ),
+    );
+  }
+
+  void _saveStockChanges(List<Product> products) {
+    Map<String, List<EditProduct>> editedPrimaryProducts = Map();
+    Map<String, List<EditProduct>> editedLorryProducts = Map();
+    for (var i = 0; i < products.length; i++) {
+      if (editProductsList[0][i].qty != 0) {
+        EditProduct editedPrimaryStock = EditProduct(
+          qty: editProductsList[0][i].qty +
+              products[i]
+                  .primaryStockList[products[i].primaryStockList.length - 1]
+                  .qty,
+          date: editProductsList[0][i].date,
+          transaction: editProductsList[0][i].qty > 0
+              ? Transaction.grn
+              : Transaction.loading,
+          transactionId: editProductsList[0][i].transactionId,
+        );
+        products[i].primaryStockList.add(editedPrimaryStock);
+        products[i].primaryStockList.sort((a, b) => a.date.compareTo(b.date));
+        editedPrimaryProducts['${products[i].id}'] =
+            products[i].primaryStockList;
+      }
+      if (editProductsList[1][i].qty != 0) {
+        EditProduct editedLorrytock = EditProduct(
+          qty: editProductsList[1][i].qty +
+              products[i]
+                  .lorryStockList[products[i].lorryStockList.length - 1]
+                  .qty,
+          date: editProductsList[1][i].date,
+          transaction: editProductsList[1][i].qty > 0
+              ? Transaction.loading
+              : Transaction.sales,
+          transactionId: editProductsList[1][i].transactionId,
+        );
+        products[i].lorryStockList.add(editedLorrytock);
+        products[i].lorryStockList.sort((a, b) => a.date.compareTo(b.date));
+        editedLorryProducts['${products[i].id}'] = products[i].lorryStockList;
+      }
+    }
+    Provider.of<Products>(context, listen: false)
+        .saveStockChanges(editedPrimaryProducts, editedLorryProducts)
+        .then((_) {
+      setState(() {
+        for (var i = 0; i < products.length; i++) {
+          editProductsList[0][i].qty = 0;
+          editProductsList[0][i].date = DateTime.now();
+          editProductsList[0][i].transactionId = uuid.v4();
+          editProductsList[1][i].qty = 0;
+          editProductsList[1][i].date = DateTime.now();
+          editProductsList[1][i].transactionId = uuid.v4();
+        }
+      });
+    });
+  }
+
+  void _addNewProduct(String name, String productCode, int primaryQty,
+      int lorryQty, DateTime minAvailableDate) {
+    final primaryStock = EditProduct(
+      qty: primaryQty,
+      date: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+    );
+    final lorryStock = EditProduct(
+      qty: lorryQty,
+      date: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+    );
+    List<EditProduct> primaryStockList = List();
+    primaryStockList.add(primaryStock);
+    List<EditProduct> lorryStockList = List();
+    lorryStockList.add(lorryStock);
+    final product = Product(
+      id: DateTime.now().toString(),
+      code: productCode,
+      name: name,
+      categoryTitle: widget.title,
+      primaryStockList: primaryStockList,
+      lorryStockList: lorryStockList,
+    );
+
+    Provider.of<Products>(context, listen: false).addProduct(product);
+    // context.read<Products>().addProduct(product);
+    setState(() {
+      editProductsList[0].add(EditProduct(
+        qty: 0,
+        date: DateTime.now(),
+        transaction: Transaction.stockTake,
+        transactionId: uuid.v4(),
+      ));
+      editProductsList[1].add(EditProduct(
+        qty: 0,
+        date: DateTime.now(),
+        transaction: Transaction.stockTake,
+        transactionId: uuid.v4(),
+      ));
+    });
+  }
+
+  bool isSaveMode() {
+    for (var i = 0; i < editProductsList[0].length; i++) {
+      if (editProductsList[0][i].qty != 0 || editProductsList[1][i].qty != 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    animationController.dispose();
+    super.dispose();
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
+import '../providers/products.dart';
+import '../widgets/new_transaction.dart';
+import '../widgets/product_item.dart';
+import '../models/edit_product.dart';
+import '../providers/product.dart';
+import '../widgets/new_product.dart';
+
+class ProductsScreen extends StatefulWidget {
+  final String title;
+
+  ProductsScreen({
+    @required this.title,
+  });
+
+  @override
+  _ProductsScreenState createState() => _ProductsScreenState();
+}
+
+class _ProductsScreenState extends State<ProductsScreen>
+    with TickerProviderStateMixin {
+  AnimationController animationController;
+  int longPressedIndex = -1;
+  double displayHeight;
+  Animation<Offset> slideAnimation;
+  Tween<Offset> slideTween;
+  List<List<EditProduct>> editProductsList = List();
+  List<Product> products;
+  var _isLoading = true;
+  var uuid = Uuid();
+  @override
+  void initState() {
+    animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      reverseDuration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    slideTween = Tween<Offset>(begin: Offset.zero, end: Offset.zero);
+    slideAnimation = slideTween.animate(CurvedAnimation(
+      parent: animationController,
+      curve: Curves.easeIn,
+    ));
+    Future.delayed(Duration.zero).then((_) {
+      products = Provider.of<Products>(context, listen: false)
+          .productsFromCategory(widget.title);
+    }).then((_) {
+      editProductsList.add(List());
+      editProductsList.add(List());
+      for (var i = 0; i < products.length; i++) {
+        editProductsList[0].add(EditProduct(
+            qty: 0,
+            transactionDate:
+                DateTime.parse(DateFormat('yyyy-MM-dd').format(DateTime.now())),
+            transaction: Transaction.grn,
+            transactionId: uuid.v4()));
+        editProductsList[1].add(EditProduct(
+            qty: 0,
+            transactionDate:
+                DateTime.parse(DateFormat('yyyy-MM-dd').format(DateTime.now())),
+            transaction: Transaction.sales,
+            transactionId: uuid.v4()));
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    });
+
+    animationController.forward();
+    super.initState();
+  }
+
+  void didLongPress(int index, double dy, BuildContext ctx, bool isIncreasing,
+      int currentSelectedTabIndex) async {
+    setState(() {
+      longPressedIndex = index;
+      animationController = AnimationController(
+        duration: const Duration(milliseconds: 400),
+        reverseDuration: const Duration(milliseconds: 200),
+        vsync: this,
+      );
+      slideTween = Tween<Offset>(
+          begin: Offset.zero,
+          end: Offset(
+              0,
+              min(
+                  ((-310 + (displayHeight - dy - 92 / 2)) /
+                      (displayHeight - 100)), //100 = appBarHeight
+                  0)));
+      slideAnimation = slideTween.animate(CurvedAnimation(
+        parent: animationController,
+        curve: Curves.easeIn,
+      ));
+    });
+    animationController.forward();
+    await showDialog(
+      context: ctx,
+      builder: (_) {
+        return NewTransaction(
+          isIncreasing,
+          animationController,
+          editProduct,
+          displayHeight,
+          currentSelectedTabIndex,
+          index,
+          widget.title,
+        );
+      },
+    ).then((value) {
+      setState(() {
+        longPressedIndex = -1;
+      });
+    });
+  }
+
+  void editProduct(
+      int adjustedQty, DateTime transactionDate, int currentSelectedTabIndex) {
+    if (currentSelectedTabIndex == 1) {
+      setState(() {
+        editProductsList[1][longPressedIndex].qty = adjustedQty;
+        if (editProductsList[1][longPressedIndex].qty > 0) {
+          editProductsList[0][longPressedIndex].qty =
+              -editProductsList[1][longPressedIndex].qty;
+          editProductsList[0][longPressedIndex].transactionDate =
+              transactionDate;
+          editProductsList[0][longPressedIndex].transactionId =
+              editProductsList[1][longPressedIndex].transactionId;
+        } else {
+          editProductsList[0][longPressedIndex].qty = 0;
+        }
+        editProductsList[1][longPressedIndex].transactionDate = transactionDate;
+      });
+    } else {
+      setState(() {
+        editProductsList[0][longPressedIndex].qty = adjustedQty;
+        if (editProductsList[0][longPressedIndex].qty < 0) {
+          editProductsList[1][longPressedIndex].qty =
+              -editProductsList[0][longPressedIndex].qty;
+          editProductsList[1][longPressedIndex].transactionDate =
+              transactionDate;
+          editProductsList[1][longPressedIndex].transactionId =
+              editProductsList[0][longPressedIndex].transactionId;
+        } else {
+          editProductsList[1][longPressedIndex].qty = 0;
+        }
+        editProductsList[0][longPressedIndex].transactionDate = transactionDate;
+      });
+    }
+  }
+
+  void didTap(int index, int adjustedQty, int currentSelectedTabIndex) {
+    if (currentSelectedTabIndex == 1) {
+      setState(() {
+        editProductsList[1][index].qty += adjustedQty;
+        if (editProductsList[1][index].qty > 0) {
+          editProductsList[0][index].qty = -editProductsList[1][index].qty;
+          editProductsList[0][index].transactionId =
+              editProductsList[1][index].transactionId;
+        } else {
+          editProductsList[0][index].qty = 0;
+        }
+      });
+    } else {
+      setState(() {
+        editProductsList[0][index].qty += adjustedQty;
+        if (editProductsList[0][index].qty < 0) {
+          editProductsList[1][index].qty = -editProductsList[0][index].qty;
+          editProductsList[1][index].transactionId =
+              editProductsList[0][index].transactionId;
+        } else {
+          editProductsList[1][index].qty = 0;
+        }
+      });
+    }
+  }
+
+  double min(double a, double b) {
+    if (a < b) {
+      return a;
+    }
+    return b;
+  }
+
+  double max(double a, double b) {
+    if (a > b) {
+      return a;
+    }
+    return b;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    displayHeight ??= MediaQuery.of(context)?.size?.height;
+    return Consumer<Products>(
+      builder: (context, products, _) => DefaultTabController(
+        initialIndex: 1,
+        length: 2,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            title: Text(widget.title),
+            centerTitle: true,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(44),
+              child: TabBar(
+                unselectedLabelColor: Colors.white,
+                labelColor: Theme.of(context).accentColor,
+                tabs: <Widget>[
+                  const Tab(
+                    icon: const Icon(Icons.home),
+                    text: 'Primary',
+                  ),
+                  const Tab(
+                    icon: const Icon(Icons.business_center),
+                    text: 'Lorry',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          body: _isLoading
+              ? const Center(
+                  child: const CircularProgressIndicator(),
+                )
+              : TabBarView(
+                  physics: NeverScrollableScrollPhysics(),
+                  children: [
+                    Container(
+                      transform: Matrix4.translationValues(
+                        0.0,
+                        longPressedIndex != -1
+                            ? -max(
+                                MediaQuery.of(context).viewInsets.bottom - 238,
+                                0)
+                            : 0,
+                        0.0,
+                      ),
+                      height: displayHeight,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: ListView.builder(
+                          itemBuilder: (context, index) => ProductItem(
+                            key: ValueKey(index),
+                            context: context,
+                            index: index,
+                            name: products
+                                .productsFromCategory(widget.title)[index]
+                                .name,
+                            code: products
+                                .productsFromCategory(widget.title)[index]
+                                .code,
+                            totalQty: products
+                                    .productsFromCategory(widget.title)[index]
+                                    .primaryStockList[products
+                                            .productsFromCategory(
+                                                widget.title)[index]
+                                            .primaryStockList
+                                            .length -
+                                        1]
+                                    .qty +
+                                editProductsList[
+                                        DefaultTabController.of(context)
+                                            .index][index]
+                                    .qty,
+                            adjustedQty: editProductsList[
+                                        DefaultTabController.of(context).index]
+                                    [index]
+                                .qty,
+                            didLongPress: didLongPress,
+                            didTap: didTap,
+                            isLongPressed: index == longPressedIndex,
+                            currentSelectedTabIndex:
+                                DefaultTabController.of(context).index,
+                          ),
+                          itemCount: products
+                              .productsFromCategory(widget.title)
+                              .length,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      transform: Matrix4.translationValues(
+                        0.0,
+                        longPressedIndex != -1
+                            ? -max(
+                                MediaQuery.of(context).viewInsets.bottom - 238,
+                                0)
+                            : 0,
+                        0.0,
+                      ),
+                      height: displayHeight,
+                      child: SlideTransition(
+                        position: slideAnimation,
+                        child: ListView.builder(
+                          itemBuilder: (context, index) => ProductItem(
+                            key: ValueKey(index),
+                            context: context,
+                            index: index,
+                            name: products
+                                .productsFromCategory(widget.title)[index]
+                                .name,
+                            code: products
+                                .productsFromCategory(widget.title)[index]
+                                .code,
+                            totalQty: products
+                                    .productsFromCategory(widget.title)[index]
+                                    .lorryStockList[products
+                                            .productsFromCategory(
+                                                widget.title)[index]
+                                            .lorryStockList
+                                            .length -
+                                        1]
+                                    .qty +
+                                editProductsList[
+                                        DefaultTabController.of(context)
+                                            .index][index]
+                                    .qty,
+                            adjustedQty: editProductsList[
+                                        DefaultTabController.of(context).index]
+                                    [index]
+                                .qty,
+                            availableLoadingQty: products
+                                    .productsFromCategory(widget.title)[index]
+                                    .primaryStockList[products
+                                            .productsFromCategory(
+                                                widget.title)[index]
+                                            .primaryStockList
+                                            .length -
+                                        1]
+                                    .qty +
+                                editProductsList[0][index].qty,
+                            didLongPress: didLongPress,
+                            didTap: didTap,
+                            isLongPressed: index == longPressedIndex,
+                            currentSelectedTabIndex:
+                                DefaultTabController.of(context).index,
+                          ),
+                          itemCount: products
+                              .productsFromCategory(widget.title)
+                              .length,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+          floatingActionButtonLocation:
+              _isLoading ? null : FloatingActionButtonLocation.centerFloat,
+          floatingActionButton: _isLoading
+              ? null
+              : FloatingActionButton(
+                  child: Icon(isSaveMode() ? Icons.save : Icons.add),
+                  onPressed: () {
+                    if (!isSaveMode()) {
+                      showModalBottomSheet(
+                        isScrollControlled: true,
+                        context: context,
+                        builder: (_) {
+                          return NewProduct(_addNewProduct);
+                        },
+                      );
+                    } else {
+                      _saveStockChanges(
+                          products.productsFromCategory(widget.title));
+                    }
+                  }),
+        ),
+      ),
+    );
+  }
+
+  void _saveStockChanges(List<Product> products) async {
+    setState(() {
+      _isLoading = true;
+    });
+    Map<String, List<EditProduct>> editedPrimaryProducts = Map();
+    Map<String, List<EditProduct>> editedLorryProducts = Map();
+    for (var i = 0; i < products.length; i++) {
+      if (editProductsList[0][i].qty != 0) {
+        products[i].primaryStockList.forEach((e) {
+          if (e.transactionDate
+              .isAfter(editProductsList[0][i].transactionDate)) {
+            e.qty += editProductsList[0][i].qty;
+          }
+        });
+
+        EditProduct editedPrimaryStock = EditProduct(
+          qty: editProductsList[0][i].qty +
+              products[i]
+                  .primaryStockList
+                  .lastWhere((e) => !e.transactionDate
+                      .isAfter(editProductsList[0][i].transactionDate))
+                  .qty,
+          transactionDate: editProductsList[0][i].transactionDate,
+          transaction: editProductsList[0][i].qty > 0
+              ? Transaction.grn
+              : Transaction.loading,
+          transactionId: editProductsList[0][i].transactionId,
+          modifiedDate: DateTime.now(),
+        );
+
+        products[i].primaryStockList.add(editedPrimaryStock);
+        products[i].primaryStockList.sort((a, b) {
+          var cmp = a.transactionDate.compareTo(b.transactionDate);
+          return (cmp != 0 ? cmp : a.modifiedDate.compareTo(b.modifiedDate));
+        });
+        editedPrimaryProducts['${products[i].id}'] =
+            products[i].primaryStockList;
+      }
+      if (editProductsList[1][i].qty != 0) {
+        products[i].lorryStockList.forEach((e) {
+          if (e.transactionDate
+              .isAfter(editProductsList[1][i].transactionDate)) {
+            e.qty += editProductsList[1][i].qty;
+          }
+        });
+        EditProduct editedLorryStock = EditProduct(
+          qty: editProductsList[1][i].qty +
+              products[i]
+                  .lorryStockList
+                  .lastWhere((e) => !e.transactionDate
+                      .isAfter(editProductsList[1][i].transactionDate))
+                  .qty,
+          transactionDate: editProductsList[1][i].transactionDate,
+          transaction: editProductsList[1][i].qty > 0
+              ? Transaction.loading
+              : Transaction.sales,
+          transactionId: editProductsList[1][i].transactionId,
+          modifiedDate: DateTime.now(),
+        );
+        products[i].lorryStockList.add(editedLorryStock);
+        products[i].lorryStockList.sort((a, b) {
+          var cmp = a.transactionDate.compareTo(b.transactionDate);
+          return (cmp != 0 ? cmp : a.modifiedDate.compareTo(b.modifiedDate));
+        });
+        editedLorryProducts['${products[i].id}'] = products[i].lorryStockList;
+      }
+    }
+    await Provider.of<Products>(context, listen: false)
+        .saveStockChanges(editedPrimaryProducts, editedLorryProducts);
+
+    setState(() {
+      for (var i = 0; i < products.length; i++) {
+        editProductsList[0][i].qty = 0;
+        editProductsList[0][i].transactionDate =
+            DateTime.parse(DateFormat('yyyy-MM-dd').format(DateTime.now()));
+        editProductsList[0][i].transactionId = uuid.v4();
+        editProductsList[1][i].qty = 0;
+        editProductsList[1][i].transactionDate =
+            DateTime.parse(DateFormat('yyyy-MM-dd').format(DateTime.now()));
+        editProductsList[1][i].transactionId = uuid.v4();
+      }
+      _isLoading = false;
+    });
+  }
+
+  void _addNewProduct(String name, String productCode, int primaryQty,
+      int lorryQty, DateTime minAvailableDate) async {
+    setState(() {
+      _isLoading = true;
+    });
+    final primaryStock = EditProduct(
+      qty: primaryQty,
+      transactionDate: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+      modifiedDate: DateTime.now(),
+    );
+    final lorryStock = EditProduct(
+      qty: lorryQty,
+      transactionDate: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+      modifiedDate: DateTime.now(),
+    );
+    List<EditProduct> primaryStockList = List();
+    primaryStockList.add(primaryStock);
+    List<EditProduct> lorryStockList = List();
+    lorryStockList.add(lorryStock);
+    final product = Product(
+      id: DateTime.now().toString(),
+      code: productCode,
+      name: name,
+      categoryTitle: widget.title,
+      primaryStockList: primaryStockList,
+      lorryStockList: lorryStockList,
+    );
+
+    Provider.of<Products>(context, listen: false).addProduct(product);
+    await Provider.of<Products>(context, listen: false).fetchAndSetProducts();
+    // context.read<Products>().addProduct(product);
+    setState(() {
+      _isLoading = false;
+      editProductsList[0].add(EditProduct(
+        qty: 0,
+        transactionDate: DateTime.now(),
+        transaction: Transaction.stockTake,
+        transactionId: uuid.v4(),
+      ));
+      editProductsList[1].add(EditProduct(
+        qty: 0,
+        transactionDate: DateTime.now(),
+        transaction: Transaction.stockTake,
+        transactionId: uuid.v4(),
+      ));
+    });
+  }
+
+  bool isSaveMode() {
+    for (var i = 0; i < editProductsList[0].length; i++) {
+      if (editProductsList[0][i].qty != 0 || editProductsList[1][i].qty != 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    animationController.dispose();
+    super.dispose();
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
+import '../providers/products.dart';
+import '../widgets/new_transaction.dart';
+import '../widgets/product_item.dart';
+import '../models/edit_product.dart';
+import '../providers/product.dart';
+import '../widgets/new_product.dart';
+import '../providers/cached_transaction_date.dart';
+
+class ProductsScreen extends StatefulWidget {
+  final String title;
+
+  ProductsScreen({
+    @required this.title,
+  });
+
+  @override
+  _ProductsScreenState createState() => _ProductsScreenState();
+}
+
+class _ProductsScreenState extends State<ProductsScreen>
+    with TickerProviderStateMixin {
+  AnimationController animationController;
+  int longPressedIndex = -1;
+  double displayHeight;
+  Animation<Offset> slideAnimation;
+  Tween<Offset> slideTween;
+  int saveCounter;
+  var _isLoading = false;
+  var uuid = Uuid();
+  var slideMovement = 0.0;
+  @override
+  void initState() {
+    animationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      reverseDuration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    slideTween = Tween<Offset>(begin: Offset.zero, end: Offset.zero);
+    slideAnimation = slideTween.animate(CurvedAnimation(
+      parent: animationController,
+      curve: Curves.easeIn,
+    ));
+    animationController.forward();
+    super.initState();
+  }
+
+  void didLongPress(int index, double dy, bool isIncreasing,
+      int currentSelectedTabIndex, Product product) async {
+    setState(() {
+      longPressedIndex = index;
+      animationController = AnimationController(
+        duration: const Duration(milliseconds: 400),
+        reverseDuration: const Duration(milliseconds: 200),
+        vsync: this,
+      );
+      slideTween = Tween<Offset>(
+          begin: Offset.zero,
+          end: Offset(
+              0,
+              min(
+                  ((-310 + (displayHeight - dy - 92 / 2)) /
+                      (displayHeight - 100)), //100 = appBarHeight
+                  0)));
+      slideAnimation = slideTween.animate(CurvedAnimation(
+        parent: animationController,
+        curve: Curves.easeIn,
+      ));
+      slideMovement = -310 + displayHeight - dy - 92;
+    });
+    animationController.forward();
+    await showDialog(
+      context: context,
+      builder: (_) {
+        return NewTransaction(
+          isIncreasing,
+          animationController,
+          displayHeight,
+          currentSelectedTabIndex,
+          product,
+        );
+      },
+    ).then((value) {
+      setState(() {
+        longPressedIndex = -1;
+      });
+    });
+  }
+
+  double min(double a, double b) {
+    if (a < b) {
+      return a;
+    }
+    return b;
+  }
+
+  double max(double a, double b) {
+    if (a > b) {
+      return a;
+    }
+    return b;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    displayHeight ??= MediaQuery.of(context)?.size?.height;
+    final products =
+        Provider.of<Products>(context).productsFromCategory(widget.title);
+    saveCounter = products
+        .where((e) => e.primaryQty != 0 || e.lorryQty != 0)
+        .toList()
+        .length;
+    return DefaultTabController(
+      initialIndex: 1,
+      length: 2,
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        appBar: AppBar(
+          leading: new IconButton(
+              icon: new Icon(Icons.arrow_back),
+              onPressed: () {
+                Navigator.pop(context, saveCounter);
+              }),
+          title: Text(widget.title),
+          centerTitle: true,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(44),
+            child: TabBar(
+              unselectedLabelColor: Colors.white,
+              labelColor: Theme.of(context).accentColor,
+              tabs: <Widget>[
+                const Tab(
+                  icon: Icon(Icons.home),
+                  text: 'Primary',
+                ),
+                const Tab(
+                  icon: Icon(Icons.business_center),
+                  text: 'Lorry',
+                ),
+              ],
+            ),
+          ),
+        ),
+        body: _isLoading
+            ? const Center(
+                child: const CircularProgressIndicator(),
+              )
+            : Container(
+                transform: Matrix4.translationValues(
+                  0.0,
+                  longPressedIndex != -1
+                      ? -max(
+                          min(
+                              -slideMovement,
+                              MediaQuery.of(context).viewInsets.bottom +
+                                  40 -
+                                  238),
+                          0)
+                      : 0,
+                  0.0,
+                ),
+                child: SlideTransition(
+                  position: slideAnimation,
+                  child: TabBarView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    children: [
+                      ProductsList(
+                        didLongPress: didLongPress,
+                        longPressedIndex: longPressedIndex,
+                        isSaveMode: isSaveMode,
+                        products: products,
+                        currentSelectedTabIndex: 0,
+                      ),
+                      ProductsList(
+                        didLongPress: didLongPress,
+                        longPressedIndex: longPressedIndex,
+                        isSaveMode: isSaveMode,
+                        products: products,
+                        currentSelectedTabIndex: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        floatingActionButtonLocation:
+            _isLoading ? null : FloatingActionButtonLocation.centerFloat,
+        floatingActionButton: _isLoading
+            ? null
+            : FloatingActionButton(
+                child: Icon(saveCounter != 0 ? Icons.save : Icons.add),
+                onPressed: () {
+                  if (saveCounter == 0) {
+                    showModalBottomSheet(
+                      isScrollControlled: true,
+                      context: context,
+                      builder: (_) {
+                        return NewProduct(_addNewProduct);
+                      },
+                    );
+                  } else {
+                    _saveStockChanges(products);
+                  }
+                }),
+      ),
+    );
+  }
+
+  Future<void> _saveStockChanges(List<Product> products) async {
+    setState(() {
+      _isLoading = true;
+    });
+    Map<String, List<EditProduct>> editedPrimaryProducts = Map();
+    Map<String, List<EditProduct>> editedLorryProducts = Map();
+    for (var i = 0; i < products.length; i++) {
+      if (products[i].primaryQty != 0) {
+        products[i].primaryStockList.forEach((e) {
+          if (e.transactionDate.isAfter(products[i].transactionDate)) {
+            e.qty += products[i].primaryQty;
+          }
+        });
+
+        EditProduct editedPrimaryStock = EditProduct(
+          qty: products[i].primaryQty +
+              products[i]
+                  .primaryStockList
+                  .lastWhere((e) =>
+                      !e.transactionDate.isAfter(products[i].transactionDate))
+                  .qty,
+          transactionDate: products[i].transactionDate,
+          transaction: products[i].primaryQty > 0
+              ? Transaction.grn
+              : Transaction.loading,
+          transactionId: uuid.v4(),
+          modifiedDate: DateTime.now(),
+        );
+
+        products[i].primaryStockList.add(editedPrimaryStock);
+        products[i].primaryStockList.sort((a, b) {
+          var cmp = a.transactionDate.compareTo(b.transactionDate);
+          return (cmp != 0 ? cmp : a.modifiedDate.compareTo(b.modifiedDate));
+        });
+        editedPrimaryProducts['${products[i].id}'] =
+            products[i].primaryStockList;
+      }
+      if (products[i].lorryQty != 0) {
+        products[i].lorryStockList.forEach((e) {
+          if (e.transactionDate.isAfter(products[i].transactionDate)) {
+            e.qty += products[i].lorryQty;
+          }
+        });
+
+        EditProduct editedLorryStock = EditProduct(
+          qty: products[i].lorryQty +
+              products[i]
+                  .lorryStockList
+                  .lastWhere((e) =>
+                      !e.transactionDate.isAfter(products[i].transactionDate))
+                  .qty,
+          transactionDate: products[i].transactionDate,
+          transaction: products[i].lorryQty > 0
+              ? Transaction.loading
+              : Transaction.sales,
+          transactionId: uuid.v4(),
+          modifiedDate: DateTime.now(),
+        );
+
+        if (products[i].lorryQty < 0) {
+          products[i].lorryStockList.removeWhere((e) =>
+              e.transactionDate.isAtSameMomentAs(products[i].transactionDate) &&
+              e.transaction ==
+                  Transaction
+                      .sales); //batching sales with same transaction date
+        }
+
+        products[i].lorryStockList.add(editedLorryStock);
+        products[i].lorryStockList.sort((a, b) {
+          var cmp = a.transactionDate.compareTo(b.transactionDate);
+          return (cmp != 0 ? cmp : a.modifiedDate.compareTo(b.modifiedDate));
+        });
+        editedLorryProducts['${products[i].id}'] = products[i].lorryStockList;
+      }
+      products[i].primaryQty = 0;
+      products[i].lorryQty = 0;
+    }
+    await Provider.of<Products>(context, listen: false)
+        .saveStockChanges(editedPrimaryProducts, editedLorryProducts);
+    // await Provider.of<Products>(context, listen: false).fetchAndSetProducts();
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _addNewProduct(String name, String productCode, int primaryQty,
+      int lorryQty, DateTime minAvailableDate) async {
+    setState(() {
+      _isLoading = true;
+    });
+    final primaryStock = EditProduct(
+      qty: primaryQty,
+      transactionDate: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+      modifiedDate: DateTime.now(),
+    );
+    final lorryStock = EditProduct(
+      qty: lorryQty,
+      transactionDate: minAvailableDate,
+      transaction: Transaction.stockTake,
+      transactionId: uuid.v4(),
+      modifiedDate: DateTime.now(),
+    );
+    List<EditProduct> primaryStockList = List();
+    primaryStockList.add(primaryStock);
+    List<EditProduct> lorryStockList = List();
+    lorryStockList.add(lorryStock);
+    final product = Product(
+      id: DateTime.now().toString(),
+      code: productCode,
+      name: name,
+      categoryTitle: widget.title,
+      primaryStockList: primaryStockList,
+      lorryStockList: lorryStockList,
+    );
+
+    await Provider.of<Products>(context, listen: false).addProduct(product);
+    // await Provider.of<Products>(context, listen: false).fetchAndSetProducts(); // Don't fetch
+    // context.read<Products>().addProduct(product);
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  void isSaveMode(int i) {
+    setState(() {
+      saveCounter += i;
+    });
+  }
+
+  @override
+  void dispose() {
+    animationController.dispose();
+    super.dispose();
+  }
+}
+
+class ProductsList extends StatefulWidget {
+  final List<Product> products;
+  final longPressedIndex;
+  final Function didLongPress;
+  final Function isSaveMode;
+  final int currentSelectedTabIndex;
+
+  const ProductsList(
+      {@required this.products,
+      @required this.longPressedIndex,
+      @required this.didLongPress,
+      @required this.isSaveMode,
+      @required this.currentSelectedTabIndex});
+  @override
+  _ProductsListState createState() => _ProductsListState();
+}
+
+class _ProductsListState extends State<ProductsList>
+    with AutomaticKeepAliveClientMixin<ProductsList> {
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Container(
+      child: ListView.builder(
+        itemBuilder: (context, index) =>
+            ProxyProvider<CachedTransactionDate, Product>(
+          update: (context, cachedDate, _) =>
+              widget.products[index]..setCachedTransactionDate = cachedDate,
+          child: ProductItem(
+            key: ValueKey(index),
+            index: index,
+            didLongPress: widget.didLongPress,
+            isLongPressed: index == widget.longPressedIndex,
+            currentSelectedTabIndex: widget.currentSelectedTabIndex,
+            isSaveMode: widget.isSaveMode,
+          ),
+        ),
+        itemCount: widget.products.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        shrinkWrap: true,
+      ),
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+}
